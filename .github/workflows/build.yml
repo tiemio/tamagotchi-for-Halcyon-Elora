@@ -29,11 +29,13 @@ jobs:
         run: |
           qmk setup -H ~/qmk_firmware vial-kb/vial-qmk -b vial -y
 
+      - name: Configure QMK userspace
+        run: |
+          qmk config user.overlay_dir=${{ github.workspace }}
+
       - name: Compile firmware (left display)
         run: |
           qmk compile -kb splitkb/halcyon/elora/rev2 -km tamagotchi -e HLC_TFT_DISPLAY=1
-        env:
-          QMK_USERSPACE: ${{ github.workspace }}
 
       - name: Rename left build
         run: |
@@ -42,8 +44,6 @@ jobs:
       - name: Compile firmware (right display)
         run: |
           qmk compile -kb splitkb/halcyon/elora/rev2 -km tamagotchi -e 'HLC_TFT_DISPLAY=1 EXTRAFLAGS=-DTAMAGOTCHI_ON_RIGHT'
-        env:
-          QMK_USERSPACE: ${{ github.workspace }}
 
       - name: Rename right build
         run: |

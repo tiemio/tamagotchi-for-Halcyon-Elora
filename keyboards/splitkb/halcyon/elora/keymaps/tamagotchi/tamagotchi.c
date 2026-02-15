@@ -3,6 +3,7 @@
 // Sprites extracted from "Cat Sprite Sheet.png".
 
 #include "hlc_tft_display/hlc_tft_display.h"
+#include "eeprom.h"
 #include <stdlib.h>
 
 // ─── Screen ───
@@ -60,6 +61,11 @@
 #define MOVE_SPEED      2       // px/frame (compensates for 5 FPS)
 #define POUNCE_DIST     40      // Manhattan px to start chasing icon
 #define OVERLAY_PAD     16      // extra px above cat for zzz/? restore
+
+// ─── EEPROM persistence ───
+#define SAVE_ADDR       4080    // high address to avoid Vial/VIA conflicts
+#define SAVE_MAGIC      0xCA7E  // validation marker ("CATe")
+#define SAVE_INTERVAL   300000  // auto-save every 5 minutes
 
 // ─── Animation states ───
 enum {
@@ -276,6 +282,23 @@ typedef struct {
 static tama_state_t st;
 static bool tama_inited = false;
 static uint32_t last_frame_time = 0;
+static uint32_t last_save_time = 0;
+
+// ─── EEPROM save/load ───
+// Layout at SAVE_ADDR: [magic:2][level:2][xp:4] = 8 bytes
+static void save_progress(void) {
+    eeprom_update_word((uint16_t *)SAVE_ADDR, SAVE_MAGIC);
+    eeprom_update_word((uint16_t *)(SAVE_ADDR + 2), st.level);
+    eeprom_update_dword((uint32_t *)(SAVE_ADDR + 4), st.xp);
+}
+
+static bool load_progress(void) {
+    if (eeprom_read_word((uint16_t *)SAVE_ADDR) != SAVE_MAGIC) return false;
+    st.level = eeprom_read_word((uint16_t *)(SAVE_ADDR + 2));
+    st.xp    = eeprom_read_dword((uint32_t *)(SAVE_ADDR + 4));
+    if (st.level == 0) st.level = 1;
+    return true;
+}
 
 // ─── Frame timing instrumentation ───
 // Displays ms/frame in bottom-right corner.
@@ -790,6 +813,7 @@ static void update_game(void) {
 
     // XP gain from typing
     if (wpm > 0) {
+        uint16_t prev_level = st.level;
         st.xp += wpm;
         while (st.xp >= st.xp_next) {
             st.xp -= st.xp_next;
@@ -798,6 +822,7 @@ static void update_game(void) {
             st.xp_bar_div = st.xp_next / XP_BAR_W;
             if (st.xp_bar_div == 0) st.xp_bar_div = 1;
         }
+        if (st.level != prev_level) save_progress();
     }
 
     st.frame++;
@@ -1003,13 +1028,17 @@ bool module_post_init_user(void) {
     st.prev_cat_bright = 0;
     st.prev_cat_facing = false;
 
-    // Level / XP init
+    // Level / XP — load saved progress or start fresh
     st.level = 1;
     st.xp = 0;
-    st.xp_next = xp_for_level(1);
+    load_progress();
+    st.xp_next = xp_for_level(st.level);
     st.xp_bar_div = st.xp_next / XP_BAR_W;
+    if (st.xp_bar_div == 0) st.xp_bar_div = 1;
+    if (st.xp >= st.xp_next) st.xp = 0;  // sanity clamp
     st.prev_level = 0;         // force first redraw
     st.prev_bar_fill = 255;
+    last_save_time = now;
 
     // Orange cat encounter init
     st.orange_phase = ORANGE_NONE;
@@ -1043,6 +1072,12 @@ bool module_post_init_user(void) {
 bool display_module_housekeeping_task_user(bool second_display) {
     if (!tama_inited) return true;     // before init, let framework handle
     if (second_display) return false;  // prevent framework surface flush from overwriting our LCD draws
+
+    // Auto-save XP progress every 5 minutes
+    if (timer_elapsed32(last_save_time) >= SAVE_INTERVAL) {
+        save_progress();
+        last_save_time = timer_read32();
+    }
 
     if (timer_elapsed32(last_frame_time) < FRAME_MS) return false;  // nothing to draw, skip framework flush
     last_frame_time = timer_read32();

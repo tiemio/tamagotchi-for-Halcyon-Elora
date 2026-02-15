@@ -1,0 +1,11 @@
+.build/
+*.uf2
+*.hex
+*.bin
+*.map
+*.elf
+compile_commands.json
+.vscode/
+.idea/
+.DS_Store
+.claude/

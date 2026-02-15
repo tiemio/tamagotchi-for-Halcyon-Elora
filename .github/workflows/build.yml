@@ -29,9 +29,12 @@ jobs:
         run: |
           qmk setup -H ~/qmk_firmware vial-kb/vial-qmk -b vial -y
 
-      - name: Configure QMK userspace
+      - name: Link userspace into QMK tree
         run: |
-          qmk config user.overlay_dir=${{ github.workspace }}
+          ln -s ${{ github.workspace }}/keyboards/splitkb/halcyon/elora/keymaps/tamagotchi \
+            ~/qmk_firmware/keyboards/splitkb/halcyon/elora/keymaps/tamagotchi
+          ln -s ${{ github.workspace }}/users/halcyon_modules \
+            ~/qmk_firmware/users/halcyon_modules
 
       - name: Compile firmware (left display)
         run: |

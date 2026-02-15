@@ -1,0 +1,6 @@
+{
+    "userspace_version": "1.0",
+    "build_targets": [
+        ["splitkb/halcyon/elora/rev2", "tamagotchi", {"HLC_TFT_DISPLAY": "1"}]
+    ]
+}

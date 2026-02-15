@@ -1,0 +1,76 @@
+name: Build Firmware
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install QMK CLI
+        run: python3 -m pip install qmk
+
+      - name: Set up QMK firmware (vial-qmk)
+        run: |
+          qmk setup -H ~/qmk_firmware vial-kb/vial-qmk -b vial -y
+
+      - name: Compile firmware (left display)
+        run: |
+          qmk compile -kb splitkb/halcyon/elora/rev2 -km tamagotchi -e HLC_TFT_DISPLAY=1
+        env:
+          QMK_USERSPACE: ${{ github.workspace }}
+
+      - name: Rename left build
+        run: |
+          mv splitkb_halcyon_elora_rev2_tamagotchi.uf2 tamagotchi-elora-left.uf2
+
+      - name: Compile firmware (right display)
+        run: |
+          qmk compile -kb splitkb/halcyon/elora/rev2 -km tamagotchi -e 'HLC_TFT_DISPLAY=1 EXTRAFLAGS=-DTAMAGOTCHI_ON_RIGHT'
+        env:
+          QMK_USERSPACE: ${{ github.workspace }}
+
+      - name: Rename right build
+        run: |
+          mv splitkb_halcyon_elora_rev2_tamagotchi.uf2 tamagotchi-elora-right.uf2
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware
+          path: |
+            tamagotchi-elora-left.uf2
+            tamagotchi-elora-right.uf2
+
+      - name: Create Release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: Firmware Build #${{ github.run_number }}
+          body: |
+            Automatically built from commit ${{ github.sha }}.
+
+            **Download the `.uf2` file for your display side:**
+            - `tamagotchi-elora-left.uf2` — tamagotchi on the left display (default)
+            - `tamagotchi-elora-right.uf2` — tamagotchi on the right display
+
+            Flash by holding the BOOT button on your Elora's RP2040, then drag the `.uf2` file onto the USB drive that appears.
+          files: |
+            tamagotchi-elora-left.uf2
+            tamagotchi-elora-right.uf2
